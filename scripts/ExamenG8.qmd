@@ -1,0 +1,244 @@
+---
+title: "Examen g8"
+author: "G8"
+format: html
+editor: visual
+---
+
+# **Participantes**
+
+-Araujo Garcia Jhulyan Edwin
+
+-KAREN ELIZABETH BORJAS FALCON
+
+# Paquetes para resumir datos
+
+Instalar paquetes
+
+```{r}
+#install.packages("gtsummary")
+#install.packages("finalfit")
+#install.packages("flextable")
+```
+
+Cargar paquetes
+
+```{r}
+library(tidyverse)
+library(here)
+library(rio)
+library(gtsummary) ## Para la "Tabla 1"
+library(finalfit)
+library(flextable)
+```
+
+# Cargando los datos
+
+```{r}
+data_dengue <- import(here("data", "dengue.csv"))
+```
+
+### La "estructura" de los datos
+
+```{r}
+str(data_dengue)
+```
+
+# 1. Resumen de variables categóricas
+
+```{r}
+table(data_dengue$Resultado, useNA = "ifany")
+```
+
+```{r}
+table(data_dengue$Tipo_Zona, useNA = "ifany")
+```
+
+Tidyverse
+
+```{r}
+data_dengue |> 
+  dplyr::count(Tipo_Vivienda, sort = TRUE)
+```
+
+Valores perdidos en proporciones:
+
+```{r}
+prop.table(table(data_dengue$Tipo_Vivienda, useNA = "ifany"))
+```
+
+# 2. Resumen de variables continuas
+
+```{r}
+mean(data_diabetes$Edad, na.rm = TRUE)
+```
+
+```{r}
+sd(data_diabetes$Edad, na.rm = TRUE)
+```
+
+```{r}
+min(data_dengue$Edad, na.rm = TRUE) # Proporciona el valor mínimo
+
+IQR(data_dengue$Edad, na.rm = TRUE) # Calcula el rango intercuartilico
+
+median(data_dengue$Edad, na.rm = TRUE) # Calcula la mediana
+```
+
+### `Summary()` para calcular todas las medidas, a la vez.
+
+```{r}
+summary(data_dengue$Edad)
+```
+
+## Mediana/media
+
+```{r}
+mean(data_dengue$Edad, na.rm = T)
+```
+
+```{r}
+median(data_dengue$Edad, na.rm = T)
+```
+
+Visualmente
+
+```{r}
+par(mfrow=c(1,2)) # Configuramos e número de elementos por Figura
+hist(data_dengue$Edad)
+hist(data_dengue$Edad)
+```
+
+# \[resumen\] Por otra variable
+
+Es el resumen de datos por otra variable usando la función `group_by()` y `summarize()`
+
+```{r}
+data_dengue |> 
+  group_by(Edad) |> 
+  summarise(n_observ = n(),
+            porcentaje = (n_observ / nrow(data_dengue)*100))
+```
+
+```{r}
+data_dengue |>  
+  group_by(Edad) |> 
+  summarize(promedio = mean(Edad, na.rm = T))
+```
+
+Usando `across()` para multiples estadísticos descriptivos para multiples variables
+
+```{r}
+data_dengue |> 
+  group_by(Distrito) |> 
+  summarize(across(.cols = where(is.numeric),
+                   .fns = list("promedio" = mean, "DE" = sd, 
+                               "máximo" = max),
+                   na.rm = TRUE))
+```
+
+# La "Tabla 1" con gtsummary
+
+```{r}
+#install.packages("finalfit")
+#install.packages("gtsummary")
+```
+
+```{r}
+library(gtsummary)
+```
+
+Tabla 1 básico
+
+```{r}
+data_dengue |> 
+  select(Genero, Edad, NS1, IgG, IgM, Zona, Tipo_Zona, Tipo_Vivienda, Distrito, Resultado) |> 
+  tbl_summary()
+```
+
+```{r}
+data_dengue |> 
+  select(Genero, Edad, NS1, IgG, IgM, Zona, Tipo_Zona, Tipo_Vivienda, Distrito, Resultado) |> 
+  tbl_summary(
+    by = Genero
+  )
+```
+
+## Configurando el estilo e idioma
+
+```{r}
+theme_gtsummary_language(language = "es") # idioma es = español
+theme_gtsummary_journal(journal = "jama")
+```
+
+```{r}
+data_dengue |> 
+  select(Genero, Edad, NS1, IgG, IgM, Zona, Tipo_Zona, Tipo_Vivienda, Distrito, Resultado) |> 
+  tbl_summary(
+    by = Genero
+  )
+```
+
+## Recodificación de variables y adición de nombres correctos a variables
+
+```{r}
+data_dengue_0 = data_dengue |>
+  mutate(
+    Edad = ff_label(Edad, "Edad (años)"),
+    
+    Edad = as.factor(Edad) |>
+      fct_relevel("≤25", "26-35", "36-50", ">50") |> 
+      ff_label("Grupo etario"),
+    
+    NS1 = ff_label(NS1, "NS1 test de antigeno"),
+    
+    IgM = ff_label(IgM,"Inmunoglobulina M"),
+    
+    Genero = as.factor(Genero) |>
+      fct_recode("Femenino" = "Femenino",
+                 "Masculino" = "Masculino") |>
+      fct_relevel("Femenino", "Masculino") |> 
+      ff_label("Genero"),
+    
+    Tipo_Zona = as_factor(Tipo_Zona) |> 
+      fct_relevel("Desarrollada", "No Desarrollada") |>
+      ff_label("Tipo de Zona"),
+    
+    Resultado = ff_label(Resultado, "Resultado de dengue")
+    )
+```
+
+```{r}
+tabla_1.v1 = data_dengue_0 |> 
+  select(Edad, NS1, IgM, Genero, Tipo_Zona, Resultado) |> 
+  tbl_summary(by = Resultado) 
+```
+
+Añadiendo nombre a la variable dependiente
+
+```{r}
+tabla_1.v2 = data_dengue_0 |> 
+  select(Edad, NS1, IgM, Genero, Tipo_Zona, Resultado) |> 
+  tbl_summary(by = Resultado) |> 
+  modify_spanning_header(all_stat_cols() ~ "**Dengue**") |>
+  add_overall() 
+```
+
+```{r}
+tabla_1 = data_dengue_0 |> 
+  select(Edad, NS1, IgM, Genero, Tipo_Zona, Resultado) |> 
+  tbl_summary(by = Resultado) |> 
+  modify_spanning_header(all_stat_cols() ~ "**Dengue**") |>
+  add_overall() |> 
+  modify_caption("**Tabla 1**. Características de los pacientes con Dengue")
+```
+
+```{r}
+install.packages("flextable")
+library(flextable)
+```
+
+```{r}
+tabla_1_flex = as_flex_table(tabla_1) # Convertir a flex table
+save_as_docx(tabla_1_flex, path = "tabla_1_flex.docx") # Guardar tabla
+```

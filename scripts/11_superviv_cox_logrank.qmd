@@ -1,0 +1,287 @@
+---
+title: "Análisis de supervivencia"
+author: "Kevin J. Paez"
+format: html
+editor: visual
+---
+
+### Instalar (si es necesario)
+
+```{r}
+install.packages("broom")
+install.packages("survival")
+install.packages("survminer")
+install.packages("ggsurvfit")
+```
+
+### Cargar paquetes
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(survival)
+library(survminer)
+library(gtsummary)
+library(broom)
+library(here)
+library(rio)
+library(ggsurvfit)
+```
+
+# 1 Analizando datos de tiempo a evento
+
+## 1.1 Censura
+
+Una característica clave en datos de supervivencia es la censura para un participante (una observación). La censura de un participante puede ocurrir por al menos 3 razones: 1) Perdida de seguimiento 2) Retiro del estudio 3) El evento no ocurre al término del periodo de estudio. Todos estos son ejemplos de "censura a la derecha", dado que ocurren luego del incio del estudio. Hay otros tipos de censura, menos frecuentes, pero estos no los consideraremos para esta sesión.
+
+# 2 Estimaciones de supervivencia usando el método de Kaplan-Meier
+
+## 2.1 El dataset para este ejercicio
+
+El dataset cancer_pulmon contiene datos de 228 individuos. Para el primer ejecicio haremos uso de las siguientes 3 variables:
+
+-   tiempo_d: tiempo de supervivencia observado en días.
+-   estado: indica si el parcipante tuvo el evento (falleció) o si fue censurado (0=censura, 1=evento).
+-   sexo: sexo del parcipante (femenino o masculino).
+
+Cargando el dataset cancer_pulmon
+
+```{r}
+dengue_data <- import(here("data", "dengue.csv"))
+```
+
+Vistazo al dataset
+
+```{r}
+
+dengue_data <- dengue_data |> 
+  mutate(estado = ifelse(Resultado == "Positivo", 1, 0))
+```
+
+```{r}
+dengue_data |> 
+  select(Edad, estado, Genero) |> 
+  summary()
+```
+
+## 2.2 El desenlace en el análisis de supervivencia
+
+Kaplan-Meier estima la probabilidad de supervivencia para distintos puntos de tiempo. En R, usamos la función `Surv()` para crear la variable "respuesta" o desenlace. Este tipo de desenlace incluye a su vez estado del participante (con el evento o sin el evento) y tiempo.
+
+```{r}
+dengue_data <- dengue_data |> 
+  mutate(estado = ifelse(Resultado == "Positivo", 1, 0))
+
+```
+
+```{r}
+Surv(dengue_data$Edad, dengue_data$estado)
+```
+
+El resultado en este chunk indica el estado (desenlace) de los participantes. El participante 1 fue observado hasta los 24 años y tuvo el evento (presentó dengue). El participante 2 fue observado hasta los 33 años y fue censurado (no presentó dengue durante el estudio). El participante 3 fue observado hasta los 45 años y tuvo el evento (presentó dengue). El participante 4 fue observado hasta los 17 años y fue censurado (no presentó dengue durante el estudio). El participante 5 fue observado hasta los 28 años y tuvo el evento (presentó dengue).
+
+La variable "respuesta" la incluimos en la función survfit para estimar la probabilidad de supervivencia (una curva) usando el método de Kaplan-Meier. Aquí estimados la curva de superviencia global sin considerar ningun predictor. Es por ello que añadimos "\~ 1" a la formula. Esa parte será reemplazada más adelante por algun predictor o covariable de interés.
+
+```{r}
+km = survfit(Surv(Edad, estado) ~ 1, data = dengue_data)
+```
+
+¿Qué hay dentro del objeto km?
+
+```{r}
+str(km)
+```
+
+## 2.3 Gráficos de Kaplan-Meier
+
+La información contenida en el objeto creado con las estimaciones puede ser mejor visualizada en los gráficos de Kaplan-Meier.
+
+```{r}
+survfit2(Surv(Edad, estado) ~ 1, data = dengue_data) |>  
+  ggsurvfit() +
+  labs(
+    x = "Edad",
+    y = "Probabilidad de supervivencia global"
+  ) +
+  add_censor_mark()
+```
+
+La función `add_confidence_interval()` añade los intervalos de confianza al 95% (sombreado en gris) para las estimaciones de probabilidad de supervivencia.
+
+```{r}
+survfit2(Surv(Edad, estado) ~ 1, data = dengue_data) |>  
+  ggsurvfit() +
+  labs(
+    x = "Edad",
+    y = "Probabilidad de supervivencia global"
+  ) + 
+  add_censor_mark() +
+  add_confidence_interval() +
+  add_risktable()
+```
+
+## 2.4 Estimación de la supervivencia a x años.
+
+Al analizar datos de supervivencia es común que nos preguntemos, por ejemplo, ¿Cuál es la probabilidad de supervivencia después de 1 año de seguimiento? Esto lo calculamos a partir de usar la función survfit(), añadiendo el arguemento times.
+
+```{r}
+summary(survfit(Surv(Edad, estado) ~ 1, data = dengue_data), times = 15)
+```
+
+La probabilidad de supervivencia al año de seguimiento es del 83%. Dicho de otra manera, 83% de los pacientes estuvieron vivos un año despues del inicio del estudio.
+
+```{r}
+survfit2(Surv(Edad, estado) ~ 1, data = dengue_data) |>
+  ggsurvfit() +
+  labs(
+    x = "Edad",
+    y = "Probabilidad de no haber sido positivo a dengue"
+  ) + 
+  add_confidence_interval() +
+  add_risktable() +
+  add_quantile(x_value = 15, linewidth = .7)
+
+```
+
+### 2.5 Estimación mediana del tiempo de supervivencia
+
+Otro dato importante a estimar es la mediana de supervivencia. Típicamente, los datos de supervivencia no tendrán una distribución normal. Asi que, la mediana es preferida sobre la media aritmética.
+
+```{r}
+survfit(Surv(Edad, status) ~ 1, data = dengue_data)
+```
+
+```{r}
+survfit2(Surv(Edad, estado) ~ 1, data = dengue_data) |>
+  ggsurvfit() +
+  labs(
+    x = "Edad",
+    y = "Probabilidad de no haber sido positivo a dengue"
+  ) + 
+  add_confidence_interval() +
+  add_risktable() +
+  add_quantile(y_value = 0.5, linewidth = .7)
+```
+
+## ¿Cómo reportar?
+
+Usando el paquete gtsummary podemos generar una tabla con datos de la supervivencia al año.
+
+```{r}
+theme_gtsummary_language(language = "es")
+```
+
+```{r}
+survfit(Surv(tiempo_d, estado) ~ 1, data = cancer_pulmon) %>% 
+  tbl_survfit(
+    times = 365.25,
+    label_header = "**Supervivencia a 1 año (IC 95%)**"
+  )
+```
+
+```{r}
+survfit(Surv(tiempo_d, estado) ~ 1, data = cancer_pulmon) |>  
+  tbl_survfit(
+    probs = 0.5,
+    label_header = "**Supervivencia a 1 año (IC 95%)**"
+  )
+```
+
+## 1.1 Comparando tiempos de supervivencia entre dos grupos
+
+En el conjunto de datos `cancer_pulmon` se incluyen tanto hombres como mujeres. Un análisis de interés consiste en evaluar si los tiempos de supervivencia difieren significativamente entre ambos grupos. Para ello, se utiliza la función `survdiff()`, que permite aplicar la prueba de log-rank y estimar si existen diferencias en las curvas de supervivencia.
+
+```{r}
+survdiff(Surv(tiempo_d, estado) ~ sexo, data = cancer_pulmon)
+```
+
+El valor de p = 0.001 de la prueba de log-rank indica que existe una diferencia estadísticamente significativa en la supervivencia global de varones y mujeres.
+
+El siguiente gráfico de Kaplan-meier muestra el resultado de la prueba de log-rank.
+
+```{r}
+survfit2(Surv(tiempo_d, estado) ~ sexo, data = cancer_pulmon) |>
+  ggsurvfit() +
+  labs(
+    x = "Días",
+    y = "Supervivencia global"
+  ) + 
+  add_confidence_interval() +
+  add_risktable() +
+  add_pvalue(caption = "Log-rank {p.value}")
+```
+
+# 3 El modelo de regresión de Cox
+
+La prueba de log-rank no ofrece una medida de efecto y solo permite evaluar una única variable independiente a la vez. Sin embargo, en investigación suele ser necesario cuantificar el tamaño del efecto de una o varias variables, e incluso realizar un análisis multivariable, aspecto que abordaremos en la siguiente sesión. Para este propósito, el modelo de regresión de Cox es una herramienta adecuada para analizar datos con desenlaces de supervivencia.
+
+En R, este modelo se puede ajustar utilizando la función `coxph()` del paquete **survival**.
+
+## 3.1 El dataset para este ejercicio
+
+El dataset para esta parte de la sesión incluye información de 213 pacientes. Entre las variables estan:
+
+-   tiempo_hosp_d: días de hospitalización
+-   estado: indica si el evento de interés esta presente (fallecido).
+-   acv_tipo - y otras covariables
+
+Cargando el dataset `acv_data`
+
+```{r}
+acv_data <- import(here("data", "s11_acv_data.csv"))
+```
+
+Usaremos a la variable tipo de ACV como la variable independiente de interés
+
+```{r}
+coxph(Surv(tiempo, estado == "Fallecido") ~ acv_tipo, data = acv_data)
+```
+
+## 3.2 Interpretación y reporte
+
+Entre los resultados, el valor p indica que existe una asociación estadísticamente significativa entre la covariable tipo de ACV y el fallecimiento. Sin embargo, el coeficiente y su intervalo de confianza al 95%, ambos en escala exponenciada, son las medidas de interés y son las que se reportan en un informe científico. Estas tablas de resultados pueden obtenerse con la función `tbl_regression()` del paquete gtsummary, utilizando la opción `exponentiate = TRUE` para mostrar la razón de riesgos (hazard ratio, HR) en lugar del logaritmo del riesgo.
+
+```{r}
+coxph(Surv(tiempo, estado == "Fallecido") ~ acv_tipo, data = acv_data) %>% 
+  tbl_regression(exp = TRUE) 
+```
+
+En esta tabla, el HR representa la razón de tasas de ocurrencia del evento entre dos grupos en un momento dado. Se interpreta como la tasa instantánea de ocurrencia del evento en aquellos que aún están en riesgo. Una HR \< 1 indica una menor tasa de ocurrencia del evento (por ejemplo, muerte), mientras que una HR \> 1 indica una tasa mayor. En la presente tabla, una HR = 0.52 implica que, en cualquier momento, las personas con ACV isquémico presentan una tasa de fallecimiento equivalente al 52% de la de las personas con ACV hemorrágico. En otras palabras, las personas con ACV isquémico tienen un riesgo instantáneo de muerte significativamente menor que las personas con ACV hemorrágico, según nuestro dataset.
+
+### 3.3 Reporte para multiple variables
+
+Es frecuente que en un estudio que incluya datos de supervivencia sea de interés evaluar multiples covariables. En R, usando la función `tbl_uvregression()` podemos generar modelos univariables simples para todas las covariables. A cambio, obtenemos la HR cruda para todas las covariables de interés.
+
+```{r}
+tabla_cox <- acv_data |>
+  tbl_uvregression(
+    include = c(sexo, diabetes, glasgow, p_sistolica, p_diastolica, 
+                leuco, acv_tipo, referido_desde),
+    y = Surv(tiempo, estado == "Fallecido"),
+    method = coxph,
+    exponentiate = TRUE,
+    conf.int = TRUE,
+    hide_n = TRUE,
+    add_estimate_to_reference_rows = FALSE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 3),
+    estimate_fun = ~ style_number(.x, digits = 2),
+    label = list(
+      sexo ~ "Sexo",
+      diabetes ~ "Diabetes mellitus tipo 2",
+      glasgow ~ "Escala de Coma de Glasgow",
+      p_sistolica ~ "Presión arterial sistólica (mmHg)",
+      p_diastolica ~ "Presión arterial diastólica (mmHg)",
+      leuco ~ "Recuento de glóbulos blancos (10³/μL)",
+      acv_tipo ~ "Tipo de accidente cerebrovascular",
+      referido_desde ~ "Referido desde"
+    )
+  ) |>
+  bold_p(t = 0.05) |>
+  modify_header(estimate = "**HR no ajustado**", p.value = "**Valor P**")
+```
+
+Imprimimos la tabla
+
+```{r}
+tabla_cox
+```
